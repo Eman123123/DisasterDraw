@@ -4,7 +4,7 @@ class PathNode {
     this.z = z;
     this.wallId = wallId;
     this.isDoor = isDoor;
-    this.isWindow = isWindow; // Add window support
+    this.isWindow = isWindow;
     this.g = 0;
     this.h = 0;
     this.f = 0;
@@ -12,16 +12,16 @@ class PathNode {
     this.neighbors = [];
     this.isExit = false;
     this.doorId = null;
-    this.windowId = null; // Add window ID
+    this.windowId = null;
   }
 }
 
 export class PathFinder {
-  constructor(walls, furniture, doors, windows = []) { // Add windows parameter
+  constructor(walls, furniture, doors, windows = []) {
     this.walls = walls || [];
     this.furniture = furniture || [];
     this.doors = doors || [];
-    this.windows = windows || []; // Store windows
+    this.windows = windows || [];
     this.nodes = [];
     this.startPoint = { x: 0, z: 0 };
     this.graphBuilt = false;
@@ -53,9 +53,9 @@ export class PathFinder {
       `${w.id}-${w.points[0].x}-${w.points[0].y}-${w.points[1].x}-${w.points[1].y}`
     ).join('|');
     
+    // ONLY include doors in hash - exclude windows
     const doorsStr = this.doors.map(d => `${d.id}-${d.isExterior}`).join('|');
-    const windowsStr = this.windows.map(w => `${w.id}-${w.isExterior}`).join('|'); // Add windows to hash
-    return furnitureStr + wallsStr + doorsStr + windowsStr;
+    return furnitureStr + wallsStr + doorsStr;
   }
 
   setStartPoint(x, z) {
@@ -178,12 +178,12 @@ export class PathFinder {
   }
 
   // =====================================================
-  // FIXED: Find ALL exterior exits (doors AND windows)
+  // FIXED: Find ONLY exterior doors (EXCLUDE windows)
   // =====================================================
   findExteriorExits() {
     const exits = [];
     
-    // Add exterior doors
+    // ONLY add exterior doors - NO windows
     this.doors.forEach(door => {
       if (door.type === 'door' && door.isExterior === true) {
         exits.push({
@@ -195,19 +195,8 @@ export class PathFinder {
       }
     });
     
-    // Add exterior windows
-    this.windows.forEach(window => {
-      if (window.type === 'window' && window.isExterior === true) {
-        exits.push({
-          id: window.id,
-          type: 'window',
-          position2D: window.position2D,
-          wallId: window.wallId
-        });
-      }
-    });
-    
-    console.log(`🚪 Found ${exits.length} exterior exits (${this.doors.filter(d => d.isExterior).length} doors, ${this.windows.filter(w => w.isExterior).length} windows)`);
+    // Windows are COMPLETELY EXCLUDED from pathfinding
+    console.log(`🚪 Found ${exits.length} exterior doors for pathfinding (windows excluded)`);
     return exits;
   }
 
@@ -217,7 +206,7 @@ export class PathFinder {
     
     this.nodes = [];
     this.calculateRoomBounds();
-    this.addExitNodes(); // Unified method for doors AND windows
+    this.addExitNodes(); // Only adds door nodes, not windows
     this.addWalkableGridNodes();
     this.connectWalkableNodes();
     
@@ -227,28 +216,26 @@ export class PathFinder {
   }
 
   // =====================================================
-  // NEW: Unified method for adding exit nodes (doors AND windows)
+  // FIXED: Add ONLY exterior door nodes (EXCLUDE windows)
   // =====================================================
   addExitNodes() {
-    // Add door nodes
+    // ONLY add exterior door nodes - NO windows
     this.doors.forEach(door => {
-      if (!door.position2D || !door.wallId) return;
-      this.addOpeningNode(door, 'door');
+      // Only add if it's an exterior door
+      if (door.type === 'door' && door.isExterior === true && door.position2D && door.wallId) {
+        this.addDoorNode(door);
+      }
     });
     
-    // Add window nodes
-    this.windows.forEach(window => {
-      if (!window.position2D || !window.wallId) return;
-      this.addOpeningNode(window, 'window');
-    });
+    // Windows are intentionally NOT added as nodes
   }
 
-  // Helper method to add opening nodes
-  addOpeningNode(opening, type) {
-    const openingX = (opening.position2D.x - this.OFFSET) * this.SCALE;
-    const openingZ = (opening.position2D.y - this.OFFSET) * this.SCALE;
+  // Helper method to add door nodes only
+  addDoorNode(door) {
+    const doorX = (door.position2D.x - this.OFFSET) * this.SCALE;
+    const doorZ = (door.position2D.y - this.OFFSET) * this.SCALE;
 
-    const wallData = this.walls.find(w => w.id === opening.wallId);
+    const wallData = this.walls.find(w => w.id === door.wallId);
     if (!wallData) return;
 
     const p1 = { 
@@ -269,21 +256,17 @@ export class PathFinder {
     const nx = -dz / len;
     const nz = dx / len;
 
-    // Place nodes on both sides
+    // Place nodes on both sides of the door
     const offsets = [0.8, -0.8];
 
     offsets.forEach(offset => {
-      const testX = openingX + nx * offset;
-      const testZ = openingZ + nz * offset;
+      const testX = doorX + nx * offset;
+      const testZ = doorZ + nz * offset;
 
       if (this.isPointWalkable(testX, testZ)) {
-        const node = new PathNode(testX, testZ, opening.wallId, type === 'door', type === 'window');
-        node.isExit = opening.isExterior || false;
-        if (type === 'door') {
-          node.doorId = opening.id;
-        } else {
-          node.windowId = opening.id;
-        }
+        const node = new PathNode(testX, testZ, door.wallId, true, false); // isDoor=true, isWindow=false
+        node.isExit = door.isExterior || false;
+        node.doorId = door.id;
         this.nodes.push(node);
       }
     });
@@ -348,12 +331,11 @@ export class PathFinder {
             if (j <= i) return;
             const distance = Math.sqrt(Math.pow(node2.x - node1.x, 2) + Math.pow(node2.z - node1.z, 2));
             
-            // Connect close nodes (increased range slightly for door/window nodes)
+            // Connect close nodes
             if (distance < 1.5 && distance > 0.2) {
               
-              // SPECIAL CASE: Directly connect opening pairs (pass through wall)
-              if ((node1.doorId && node1.doorId === node2.doorId) ||
-                  (node1.windowId && node1.windowId === node2.windowId)) {
+              // SPECIAL CASE: Directly connect door pairs (pass through wall)
+              if (node1.doorId && node1.doorId === node2.doorId) {
                 node1.neighbors.push({ node: node2, cost: distance });
                 node2.neighbors.push({ node: node1, cost: distance });
                 return; 
@@ -362,11 +344,11 @@ export class PathFinder {
               // STANDARD CASE: Check for wall collisions
               let wallBlocked = false;
               for (const wall of this.wallSegments) {
-                // If either node belongs to this wall's opening, skip collision check
-                const isOpeningOnThisWall = (node1.wallId === wall.id && (node1.isDoor || node1.isWindow)) || 
-                                           (node2.wallId === wall.id && (node2.isDoor || node2.isWindow));
+                // If either node belongs to this wall's door, skip collision check
+                const isDoorOnThisWall = (node1.wallId === wall.id && node1.isDoor) || 
+                                         (node2.wallId === wall.id && node2.isDoor);
                 
-                if (isOpeningOnThisWall) {
+                if (isDoorOnThisWall) {
                   continue; // Skip checking this wall segment
                 }
 
@@ -493,12 +475,12 @@ export class PathFinder {
   }
 
   // =====================================================
-  // FIXED: Find shortest path to ANY exterior exit
+  // FIXED: Find shortest path to ANY exterior door (NO windows)
   // =====================================================
   findPathToNearestExit(startX, startZ) {
     const exits = this.findExteriorExits();
     if (exits.length === 0) {
-      console.warn('❌ No exterior exits found');
+      console.warn('❌ No exterior doors found for pathfinding');
       return null;
     }
     
@@ -506,7 +488,7 @@ export class PathFinder {
     let bestDistance = Infinity;
     let bestExit = null;
     
-    console.log(`🔍 Searching for shortest path to ${exits.length} exterior exits...`);
+    console.log(`🔍 Searching for shortest path to ${exits.length} exterior doors...`);
     
     for (const exit of exits) {
       if (exit.position2D) {
@@ -517,7 +499,7 @@ export class PathFinder {
         
         if (path && path.length >= 2) {
           const distance = this.calculatePathDistance(path);
-          console.log(`  Found ${exit.type} at distance: ${distance.toFixed(2)}m`);
+          console.log(`  Found door at distance: ${distance.toFixed(2)}m`);
           
           if (distance < bestDistance) {
             bestDistance = distance;
@@ -529,18 +511,18 @@ export class PathFinder {
     }
     
     if (bestPath) {
-      console.log(`✅ Shortest path: ${bestExit.type} at ${bestDistance.toFixed(2)}m`);
+      console.log(`✅ Shortest path to exterior door at ${bestDistance.toFixed(2)}m`);
       // Add exit info to path for visualization
       bestPath.exitType = bestExit.type;
       bestPath.exitId = bestExit.id;
       bestPath.distance = bestDistance;
     } else {
-      console.log('❌ No path found to any exterior exit');
+      console.log('❌ No path found to any exterior door');
     }
     
     return bestPath;
   }
-    // Add this method inside the PathFinder class
+  
   isValidStartPosition(x, z) {
     // 1. Ensure bounds are calculated
     if (!this.roomBounds || this.wallSegments.length === 0) {
@@ -565,14 +547,13 @@ export class PathFinder {
     }
     
     return true;
-  } 
+  }
 
-  
   // =====================================================
-  // FIXED: Find path to specific exit by ID
+  // FIXED: Find path to specific door by ID (NO windows)
   // =====================================================
   findPathToSpecificExit(startX, startZ, exitId) {
-    // Check doors
+    // ONLY check doors - NO windows
     const door = this.doors.find(d => d.id === exitId && d.isExterior);
     if (door && door.position2D) {
       const goalX = (door.position2D.x - this.OFFSET) * this.SCALE;
@@ -580,14 +561,7 @@ export class PathFinder {
       return this.findPath(startX, startZ, goalX, goalZ);
     }
     
-    // Check windows
-    const window = this.windows.find(w => w.id === exitId && w.isExterior);
-    if (window && window.position2D) {
-      const goalX = (window.position2D.x - this.OFFSET) * this.SCALE;
-      const goalZ = (window.position2D.y - this.OFFSET) * this.SCALE;
-      return this.findPath(startX, startZ, goalX, goalZ);
-    }
-    
+    console.warn(`Door ${exitId} not found or is not an exterior door`);
     return null;
   }
 
