@@ -29,10 +29,13 @@ Node.js (v16 or higher)
 npm (v8 or higher)
 
 ## Install Dependencies
-bash
+```bash
 npm install
-Run Development Server
-bash
+```
+npm install
+## Run Development Server
+```bash
 npm run dev
+```
 The application will run at http://localhost:3002
 
