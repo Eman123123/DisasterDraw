@@ -1,10 +1,10 @@
-DRAW2D → 3D - Blueprint to 3D and Disaster Simulation
-Project Overview
+# DRAW2D → 3D - Blueprint to 3D and Disaster Simulation
+## Project Overview
 This project converts 2D hand-drawn floor plans into interactive 3D models and simulates disaster scenarios such as earthquakes and floods. The system allows users to draw walls, place furniture, and visualize evacuation paths in real time, providing an immersive environment for emergency preparedness training.
 
 The goal is to help architects, safety planners, and general users understand building evacuation and disaster response through realistic 3D simulation and intelligent pathfinding.
 
-Objectives
+## Objectives
 Draw 2D floor plans using an intuitive click-based drawing interface
 
 Convert 2D drawings into interactive 3D building models in real time
@@ -21,26 +21,18 @@ Provide real-time safety guidelines based on disaster type
 
 Enable interactive furniture placement (move, rotate, resize, recolor)
 
-Technology Stack
-Category	Technologies
-Frontend Framework	React 18
-3D Graphics	Three.js, @react-three/fiber, @react-three/drei
-Build Tool	Vite
-Styling	CSS3 (Global + Component-level)
-Pathfinding	Custom A* implementation
-State Management	React Hooks (useState, useEffect, useCallback, useRef)
-Language	JavaScript (ES6+), JSX
-Installation
-Prerequisites
+
+# Installation
+## Prerequisites
 Node.js (v16 or higher)
 
 npm (v8 or higher)
 
-Install Dependencies
+## Install Dependencies
 bash
 npm install
 Run Development Server
 bash
 npm run dev
-The application will run at http://localhost:5173
+The application will run at http://localhost:3002
 
